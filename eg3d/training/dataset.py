@@ -239,6 +239,22 @@ class ImageFolderDataset(Dataset):
         labels = [labels[fname.replace('\\', '/')] for fname in self._image_fnames]
         labels = np.array(labels)
         labels = labels.astype({1: np.int64, 2: np.float32}[labels.ndim])
+        # class index
+        if labels.shape[1] == 26:
+            # map discontinuous class labels to continuous 0~N
+            class_raw_idx = np.squeeze(labels[:,25]).tolist()
+            unique_class = sorted(list(set(class_raw_idx)))
+            max_class_num = len(unique_class)
+            raw2new_idx = {}
+            for idx in range(len(unique_class)):
+                raw2new_idx[unique_class[idx]] = idx
+            class_new_idx = [raw2new_idx[raw_class] for raw_class in class_raw_idx]
+
+            onehot = np.zeros((len(labels), max_class_num), dtype=np.float32)
+            onehot[range(len(labels)), class_new_idx] = 1
+
+            labels = np.concatenate([labels[:,:25], onehot], axis=1)
+        
         return labels
 
 #----------------------------------------------------------------------------

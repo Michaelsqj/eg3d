@@ -126,6 +126,11 @@ def training_loop(
     abort_fn                = None,     # Callback function for determining whether to abort training. Must return consistent results across ranks.
     progress_fn             = None,     # Callback function for updating training progress. Called for all ranks.
 ):
+    # solve the issue of unbalanced usage of GPU memory
+    # according to https://github.com/NVlabs/eg3d/issues/58#issuecomment-1217584011
+    # and https://discuss.pytorch.org/t/extra-10gb-memory-on-gpu-0-in-ddp-tutorial/118113
+    torch.cuda.set_device(rank)
+    torch.cuda.empty_cache()
     # Initialize.
     start_time = time.time()
     device = torch.device('cuda', rank)

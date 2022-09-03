@@ -60,7 +60,7 @@ class StyleGAN2Loss(Loss):
             c_gen_conditioning = torch.where(torch.rand((c.shape[0], 1), device=c.device) < swapping_prob, c_swapped, c)
             # Keep class conditioning unswapped
             if c.shape[1] > 25:
-                c_gen_conditioning = torch.cat([c_gen_conditioning[:,:25], c[:,25:]], dim=1)
+                c_gen_conditioning = torch.cat([torch.zeros_like(c[:,:25]), c[:,25:]], dim=1)
         else:
             c_gen_conditioning = torch.zeros_like(c)
 
@@ -136,7 +136,7 @@ class StyleGAN2Loss(Loss):
                 c_swapped = torch.roll(gen_c.clone(), 1, 0)
                 c_gen_conditioning = torch.where(torch.rand([], device=gen_c.device) < swapping_prob, c_swapped, gen_c)
                 if gen_c.shape[1] > 25:
-                    c_gen_conditioning = torch.cat([c_gen_conditioning[:,:25], gen_c[:,25:]], dim=1)
+                    c_gen_conditioning = torch.cat([torch.zeros_like(gen_c[:,:25]), gen_c[:,25:]], dim=1)
             else:
                 c_gen_conditioning = torch.zeros_like(gen_c)
 
@@ -162,7 +162,7 @@ class StyleGAN2Loss(Loss):
                 c_swapped = torch.roll(gen_c.clone(), 1, 0)
                 c_gen_conditioning = torch.where(torch.rand([], device=gen_c.device) < swapping_prob, c_swapped, gen_c)
                 if gen_c.shape[1] > 25:
-                    c_gen_conditioning = torch.cat([c_gen_conditioning[:,:25], gen_c[:,25:]], dim=1)
+                    c_gen_conditioning = torch.cat([torch.zeros_like(gen_c[:,:25]), gen_c[:,25:]], dim=1)
             else:
                 c_gen_conditioning = torch.zeros_like(gen_c)
 
@@ -184,7 +184,7 @@ class StyleGAN2Loss(Loss):
                 c_swapped = torch.roll(gen_c.clone(), 1, 0)
                 c_gen_conditioning = torch.where(torch.rand([], device=gen_c.device) < swapping_prob, c_swapped, gen_c)
                 if gen_c.shape[1] > 25:
-                    c_gen_conditioning = torch.cat([c_gen_conditioning[:,:25], gen_c[:,25:]], dim=1)
+                    c_gen_conditioning = torch.cat([torch.zeros_like(gen_c[:,:25]), gen_c[:,25:]], dim=1)
             else:
                 c_gen_conditioning = torch.zeros_like(gen_c)
 
@@ -210,7 +210,7 @@ class StyleGAN2Loss(Loss):
                 c_swapped = torch.roll(gen_c.clone(), 1, 0)
                 c_gen_conditioning = torch.where(torch.rand([], device=gen_c.device) < swapping_prob, c_swapped, gen_c)
                 if gen_c.shape[1] > 25:
-                    c_gen_conditioning = torch.cat([c_gen_conditioning[:,:25], gen_c[:,25:]], dim=1)
+                    c_gen_conditioning = torch.cat([torch.zeros_like(gen_c[:,:25]), gen_c[:,25:]], dim=1)
             else:
                 c_gen_conditioning = torch.zeros_like(gen_c)
 
@@ -232,7 +232,7 @@ class StyleGAN2Loss(Loss):
                 c_swapped = torch.roll(gen_c.clone(), 1, 0)
                 c_gen_conditioning = torch.where(torch.rand([], device=gen_c.device) < swapping_prob, c_swapped, gen_c)
                 if gen_c.shape[1] > 25:
-                    c_gen_conditioning = torch.cat([c_gen_conditioning[:,:25], gen_c[:,25:]], dim=1)
+                    c_gen_conditioning = torch.cat([ torch.zeros_like(gen_c[:,:25]), gen_c[:,25:]], dim=1)
             else:
                 c_gen_conditioning = torch.zeros_like(gen_c)
 

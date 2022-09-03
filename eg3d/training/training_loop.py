@@ -179,6 +179,8 @@ def training_loop(
         c = torch.empty([batch_gpu, G.c_dim], device=device)
         img = misc.print_module_summary(G, [z, c])
         misc.print_module_summary(D, [img, c])
+        del z, c, img
+        torch.cuda.empty_cache()
 
     # Setup augmentation.
     if rank == 0:
@@ -371,6 +373,8 @@ def training_loop(
             save_image_grid(images_raw, os.path.join(run_dir, f'fakes{cur_nimg//1000:06d}_raw.png'), drange=[-1,1], grid_size=grid_size)
             save_image_grid(images_depth, os.path.join(run_dir, f'fakes{cur_nimg//1000:06d}_depth.png'), drange=[images_depth.min(), images_depth.max()], grid_size=grid_size)
 
+            del out
+            torch.cuda.empty_cache()
             #--------------------
             # # Log forward-conditioned images
 

@@ -156,70 +156,79 @@ def generate_images(
     cam2world_pose = LookAtPoseSampler.sample(3.14/2, 3.14/2, torch.tensor([0, 0, 0.2], device=device), radius=2.7, device=device)
     intrinsics = FOV_to_intrinsics(fov_deg, device=device)
 
-    # Generate images.
-    for seed_idx, seed in enumerate(seeds):
-        print('Generating image for seed %d (%d/%d) ...' % (seed, seed_idx, len(seeds)))
-        z = torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim)).to(device)
+    # class_idx = 3
+    class_num = 55
 
-        imgs = []
-        angle_p = -0.2
-        for angle_y, angle_p in [(.4, angle_p), (0, angle_p), (-.4, angle_p)]:
-            cam_pivot = torch.tensor(G.rendering_kwargs.get('avg_camera_pivot', [0, 0, 0]), device=device)
-            cam_radius = G.rendering_kwargs.get('avg_camera_radius', 2.7)
-            cam2world_pose = LookAtPoseSampler.sample(np.pi/2 + angle_y, np.pi/2 + angle_p, cam_pivot, radius=cam_radius, device=device)
-            conditioning_cam2world_pose = LookAtPoseSampler.sample(np.pi/2, np.pi/2, cam_pivot, radius=cam_radius, device=device)
-            camera_params = torch.cat([cam2world_pose.reshape(-1, 16), intrinsics.reshape(-1, 9)], 1)
-            conditioning_params = torch.cat([conditioning_cam2world_pose.reshape(-1, 16), intrinsics.reshape(-1, 9)], 1)
+    for class_idx in range(55):
+        # Generate images.
+        for seed_idx, seed in enumerate(seeds):
+            print('Generating image for seed %d (%d/%d) ...' % (seed, seed_idx, len(seeds)))
+            z = torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim)).to(device)
 
-            ws = G.mapping(z, conditioning_params, truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff)
-            img = G.synthesis(ws, camera_params)['image']
+            imgs = []
+            angle_p = -0.2
+            for angle_y, angle_p in [(.4, angle_p), (0, angle_p), (-.4, angle_p)]:
+                cam_pivot = torch.tensor(G.rendering_kwargs.get('avg_camera_pivot', [0, 0, 0]), device=device)
+                cam_radius = G.rendering_kwargs.get('avg_camera_radius', 2.7)
+                cam2world_pose = LookAtPoseSampler.sample(np.pi/2 + angle_y, np.pi/2 + angle_p, cam_pivot, radius=cam_radius, device=device)
+                conditioning_cam2world_pose = LookAtPoseSampler.sample(np.pi/2, np.pi/2, cam_pivot, radius=cam_radius, device=device)
+                camera_params = torch.cat([cam2world_pose.reshape(-1, 16), intrinsics.reshape(-1, 9)], 1)
+                
+                class_condition = torch.zeros((camera_params.shape[0],class_num), device=camera_params.device, dtype=camera_params.dtype)
+                class_condition[:, class_idx] = 1
+                conditioning_params = torch.cat([torch.zeros_like(camera_params), class_condition], 1)
+                # conditioning_params = torch.cat([conditioning_cam2world_pose.reshape(-1, 16), intrinsics.reshape(-1, 9)], 1)
 
-            img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
-            imgs.append(img)
 
-        img = torch.cat(imgs, dim=2)
+                ws = G.mapping(z, conditioning_params, truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff)
+                img = G.synthesis(ws, camera_params)['image']
 
-        PIL.Image.fromarray(img[0].cpu().numpy(), 'RGB').save(f'{outdir}/seed{seed:04d}.png')
+                img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
+                imgs.append(img)
 
-        if shapes:
-            # extract a shape.mrc with marching cubes. You can view the .mrc file using ChimeraX from UCSF.
-            max_batch=1000000
+            img = torch.cat(imgs, dim=2)
 
-            samples, voxel_origin, voxel_size = create_samples(N=shape_res, voxel_origin=[0, 0, 0], cube_length=G.rendering_kwargs['box_warp'] * 1)#.reshape(1, -1, 3)
-            samples = samples.to(z.device)
-            sigmas = torch.zeros((samples.shape[0], samples.shape[1], 1), device=z.device)
-            transformed_ray_directions_expanded = torch.zeros((samples.shape[0], max_batch, 3), device=z.device)
-            transformed_ray_directions_expanded[..., -1] = -1
+            PIL.Image.fromarray(img[0].cpu().numpy(), 'RGB').save(f'{outdir}/seed{seed:04d}.png')
 
-            head = 0
-            with tqdm(total = samples.shape[1]) as pbar:
-                with torch.no_grad():
-                    while head < samples.shape[1]:
-                        torch.manual_seed(0)
-                        sigma = G.sample(samples[:, head:head+max_batch], transformed_ray_directions_expanded[:, :samples.shape[1]-head], z, conditioning_params, truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff, noise_mode='const')['sigma']
-                        sigmas[:, head:head+max_batch] = sigma
-                        head += max_batch
-                        pbar.update(max_batch)
+            if shapes:
+                # extract a shape.mrc with marching cubes. You can view the .mrc file using ChimeraX from UCSF.
+                max_batch=1000000
 
-            sigmas = sigmas.reshape((shape_res, shape_res, shape_res)).cpu().numpy()
-            sigmas = np.flip(sigmas, 0)
+                samples, voxel_origin, voxel_size = create_samples(N=shape_res, voxel_origin=[0, 0, 0], cube_length=G.rendering_kwargs['box_warp'] * 1)#.reshape(1, -1, 3)
+                samples = samples.to(z.device)
+                sigmas = torch.zeros((samples.shape[0], samples.shape[1], 1), device=z.device)
+                transformed_ray_directions_expanded = torch.zeros((samples.shape[0], max_batch, 3), device=z.device)
+                transformed_ray_directions_expanded[..., -1] = -1
 
-            # Trim the border of the extracted cube
-            pad = int(30 * shape_res / 256)
-            pad_value = -1000
-            sigmas[:pad] = pad_value
-            sigmas[-pad:] = pad_value
-            sigmas[:, :pad] = pad_value
-            sigmas[:, -pad:] = pad_value
-            sigmas[:, :, :pad] = pad_value
-            sigmas[:, :, -pad:] = pad_value
+                head = 0
+                with tqdm(total = samples.shape[1]) as pbar:
+                    with torch.no_grad():
+                        while head < samples.shape[1]:
+                            torch.manual_seed(0)
+                            sigma = G.sample(samples[:, head:head+max_batch], transformed_ray_directions_expanded[:, :samples.shape[1]-head], z, conditioning_params, truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff, noise_mode='const')['sigma']
+                            sigmas[:, head:head+max_batch] = sigma
+                            head += max_batch
+                            pbar.update(max_batch)
 
-            if shape_format == '.ply':
-                from shape_utils import convert_sdf_samples_to_ply
-                convert_sdf_samples_to_ply(np.transpose(sigmas, (2, 1, 0)), [0, 0, 0], 1, os.path.join(outdir, f'seed{seed:04d}.ply'), level=10)
-            elif shape_format == '.mrc': # output mrc
-                with mrcfile.new_mmap(os.path.join(outdir, f'seed{seed:04d}.mrc'), overwrite=True, shape=sigmas.shape, mrc_mode=2) as mrc:
-                    mrc.data[:] = sigmas
+                sigmas = sigmas.reshape((shape_res, shape_res, shape_res)).cpu().numpy()
+                sigmas = np.flip(sigmas, 0)
+
+                # Trim the border of the extracted cube
+                pad = int(30 * shape_res / 256)
+                pad_value = -1000
+                sigmas[:pad] = pad_value
+                sigmas[-pad:] = pad_value
+                sigmas[:, :pad] = pad_value
+                sigmas[:, -pad:] = pad_value
+                sigmas[:, :, :pad] = pad_value
+                sigmas[:, :, -pad:] = pad_value
+
+                if shape_format == '.ply':
+                    from shape_utils import convert_sdf_samples_to_ply
+                    convert_sdf_samples_to_ply(np.transpose(sigmas, (2, 1, 0)), [0, 0, 0], 1, os.path.join(outdir, f'seed{seed:04d}.ply'), level=10)
+                elif shape_format == '.mrc': # output mrc
+                    with mrcfile.new_mmap(os.path.join(outdir, f'seed{seed:04d}_class{class_idx:02d}.mrc'), overwrite=True, shape=sigmas.shape, mrc_mode=2) as mrc:
+                        mrc.data[:] = sigmas
 
 
 #----------------------------------------------------------------------------

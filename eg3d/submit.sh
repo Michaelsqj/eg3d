@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 ${HOME}/anaconda3/envs/eg3d/bin/python train.py --outdir=/storage/guangrun/qijia_3d_model/eg3d/shapenet_core_v2/training-runs --cfg=shapenet --data=/datasets/guangrun/qijia_3d_model/shapenet_core_v2_rendered_0_5.zip --gpus=8 --batch=64 --gamma=0.3 --gen_pose_cond=True
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python train.py --outdir=/storage/guangrun/qijia_3d_model/eg3d/shapenet_core_v2/training-runs --cfg=shapenet --data=/datasets/guangrun/qijia_3d_model/shapenet_core_v2_rendered_0_5.zip --gpus=8 --batch=64 --gamma=0.3 --gen_pose_cond=True

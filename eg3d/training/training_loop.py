@@ -139,7 +139,7 @@ def training_loop(
     torch.backends.cudnn.benchmark = cudnn_benchmark    # Improves training speed.
     torch.backends.cuda.matmul.allow_tf32 = False       # Improves numerical accuracy.
     torch.backends.cudnn.allow_tf32 = False             # Improves numerical accuracy.
-    torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = False  # Improves numerical accuracy.
+    # torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = False  # Improves numerical accuracy.
     conv2d_gradfix.enabled = True                       # Improves training speed. # TODO: ENABLE
     grid_sample_gradfix.enabled = False                  # Avoids errors with the augmentation pipe.
 

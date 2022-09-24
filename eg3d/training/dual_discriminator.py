@@ -85,7 +85,8 @@ class SingleDiscriminator(torch.nn.Module):
 
 def filtered_resizing(image_orig_tensor, size, f, filter_mode='antialiased'):
     if filter_mode == 'antialiased':
-        ada_filtered_64 = torch.nn.functional.interpolate(image_orig_tensor, size=(size, size), mode='bilinear', align_corners=False, antialias=True)
+        # ada_filtered_64 = torch.nn.functional.interpolate(image_orig_tensor, size=(size, size), mode='bilinear', align_corners=False, antialias=True)
+        ada_filtered_64 = torch.nn.functional.interpolate(image_orig_tensor, size=(size, size), mode='bilinear', align_corners=False)
     elif filter_mode == 'classic':
         ada_filtered_64 = upfirdn2d.upsample2d(image_orig_tensor, f, up=2)
         ada_filtered_64 = torch.nn.functional.interpolate(ada_filtered_64, size=(size * 2 + 2, size * 2 + 2), mode='bilinear', align_corners=False)

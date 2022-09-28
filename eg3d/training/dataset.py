@@ -249,7 +249,8 @@ class ImageFolderDataset(Dataset):
             onehot = np.zeros((len(labels), max_class_num), dtype=np.float32)
             onehot[range(len(labels)), class_raw_idx] = 1
 
-            labels = np.concatenate([labels[:,:25], onehot], axis=1)
+            # labels = np.concatenate([labels[:,:25], onehot], axis=1)
+            labels = onehot
         
         return labels
 

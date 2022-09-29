@@ -63,6 +63,11 @@ class ProjectedGANLoss(Loss):
         self.cls_weight = cls_weight
         self.cls_guidance_loss = torch.nn.CrossEntropyLoss()
 
+        self.neural_rendering_resolution_initial = 128
+        self.neural_rendering_resolution_final = 128
+        self.neural_rendering_resolution_fade_kimg = 1000
+
+
     def run_G(self, z, c, neural_rendering_resolution, update_emas=False):
         ws = self.G.mapping(z, c, update_emas=update_emas)
         if self.style_mixing_prob > 0:
@@ -98,10 +103,10 @@ class ProjectedGANLoss(Loss):
         if phase in ['Gmain', 'Gboth']:
 
             # disable gradients for superres
-            if self.train_head_only:
-                self.G.mapping.requires_grad_(False)
-                for name in self.G.synthesis.layer_names:
-                    getattr(self.G.synthesis, name).requires_grad_(name in self.G.head_layer_names)
+            # if self.train_head_only:
+            #     self.G.mapping.requires_grad_(False)
+            #     for name in self.G.synthesis.layer_names:
+            #         getattr(self.G.synthesis, name).requires_grad_(name in self.G.head_layer_names)
 
             with torch.autograd.profiler.record_function('Gmain_forward'):
                 gen_img, _gen_ws = self.run_G(gen_z, gen_c, neural_rendering_resolution)

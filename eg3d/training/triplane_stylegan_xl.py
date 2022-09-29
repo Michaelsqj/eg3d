@@ -44,7 +44,7 @@ class TriPlaneGenerator(torch.nn.Module):
         self.renderer = ImportanceRenderer()
         self.ray_sampler = RaySampler()
         self.backbone = SuperresGenerator128()      # w_dim=512, z_dim=64, c_dim=1000
-        self.decoder = OSGDecoder(3, {'decoder_lr_mul': rendering_kwargs.get('decoder_lr_mul', 1), 'decoder_output_dim': 3})
+        self.decoder = OSGDecoder(32, {'decoder_lr_mul': rendering_kwargs.get('decoder_lr_mul', 1), 'decoder_output_dim': 3})
         self.neural_rendering_resolution = 128
         self.rendering_kwargs = rendering_kwargs
     
@@ -52,8 +52,6 @@ class TriPlaneGenerator(torch.nn.Module):
 
     
     def mapping(self, z, c, truncation_psi=1, truncation_cutoff=None, update_emas=False):
-        if self.rendering_kwargs['c_gen_conditioning_zero']:
-                c = torch.zeros_like(c)
         return self.backbone.mapping(z, c * self.rendering_kwargs.get('c_scale', 0), truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff, update_emas=update_emas)
 
     def synthesis(self, ws, c, neural_rendering_resolution=None, update_emas=False, cache_backbone=False, use_cached_backbone=False, **synthesis_kwargs):
@@ -69,7 +67,7 @@ class TriPlaneGenerator(torch.nn.Module):
 
         num_view = 1
         intrinsics = torch.tensor([1.0, 0.0, 0.5, 0.0, 1.0, 0.5, 0.0, 0.0, 1.0], device=planes.device).view(1,3,3)
-        intrinsics = torch.repeat(intrinsics, [len(planes),1,1])
+        intrinsics = intrinsics.repeat([len(planes),1,1])
 
         for i in range(num_view):
             cam2world_matrix = UniformCameraPoseSampler.sample(math.pi/2, math.pi/2, horizontal_stddev=math.pi/2, 

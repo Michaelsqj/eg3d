@@ -55,6 +55,10 @@ class ProjectedGANLoss(Loss):
         self.pl_no_weight_grad = True
         self.pl_mean = torch.zeros([], device=device)
 
+        self.neural_rendering_resolution_initial = 128
+        self.neural_rendering_resolution_final = 128
+        self.neural_rendering_resolution_fade_kimg = 1000
+
         # classifier guidance
         cls = timm.create_model(cls_model, pretrained=True).eval()
         self.classifier = nn.Sequential(Interpolate(224), cls).to(device)
@@ -99,9 +103,9 @@ class ProjectedGANLoss(Loss):
 
             # disable gradients for superres
             if self.train_head_only:
-                self.G.mapping.requires_grad_(False)
-                for name in self.G.synthesis.layer_names:
-                    getattr(self.G.synthesis, name).requires_grad_(name in self.G.head_layer_names)
+                self.G.backbone.mapping.requires_grad_(False)
+                for name in self.G.backbone.synthesis.layer_names:
+                    getattr(self.G.backbone.synthesis, name).requires_grad_(name in self.G.backbone.head_layer_names)
 
             with torch.autograd.profiler.record_function('Gmain_forward'):
                 gen_img, _gen_ws = self.run_G(gen_z, gen_c, neural_rendering_resolution)

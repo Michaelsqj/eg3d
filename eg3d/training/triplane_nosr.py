@@ -7,7 +7,8 @@
 # disclosure or distribution of this material and related documentation
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
-
+import json
+import random
 import torch
 from torch_utils import persistence
 from training.networks_stylegan2 import Generator as StyleGAN2Backbone
@@ -47,6 +48,9 @@ class TriPlaneGenerator(torch.nn.Module):
         self.rendering_kwargs = rendering_kwargs
     
         self._last_planes = None
+
+        with open("/scratch/local/ssd/guangrun/qijia_3d_model/eg3d/eg3d/camera_poses.json",'r') as f:
+            self.camera_poses = json.load(f)
     
     def mapping(self, z, c, truncation_psi=1, truncation_cutoff=None, update_emas=False):
         if self.rendering_kwargs['c_gen_conditioning_zero']:
@@ -76,10 +80,14 @@ class TriPlaneGenerator(torch.nn.Module):
         intrinsics = torch.tensor([1.0, 0.0, 0.5, 0.0, 1.0, 0.5, 0.0, 0.0, 1.0], device=planes.device).view(1,3,3)
         intrinsics = intrinsics.repeat([len(planes),1,1])
 
-        cam2world_matrix = UniformCameraPoseSampler.sample(math.pi/2, math.pi/2, horizontal_stddev=math.pi/2, 
-                                                                radius=1, batch_size=len(planes), device=planes.device)
+        # cam2world_matrix = UniformCameraPoseSampler.sample(math.pi/2, math.pi/2, horizontal_stddev=math.pi/2, 
+        #                                                         radius=1, batch_size=len(planes), device=planes.device)
 
-        cam2world_matrix = cam2world_matrix.view(-1,4,4)
+        # cam2world_matrix = cam2world_matrix.view(-1,4,4)
+        random.shuffle(self.camera_poses)
+        cam2world_matrix = [self.camera_poses[i]["cam_pose"][:16] for i in range(len(planes))]
+        cam2world_matrix = torch.tensor(cam2world_matrix, device=planes.device).view(-1,4,4)
+
         # Create a batch of rays for volume rendering
         ray_origins, ray_directions = self.ray_sampler(cam2world_matrix, intrinsics, neural_rendering_resolution)
         N, M, _ = ray_origins.shape

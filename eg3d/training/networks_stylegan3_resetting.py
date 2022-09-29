@@ -765,31 +765,28 @@ class SuperresGenerator128(torch.nn.Module):
         self.use_radial_filters = False
         self.head_layer_names = G_stem.head_layer_names
 
-        # # get the attribute of the last layer
-        # print("get the attribute of the last layer")
-        # last_layer = getattr(self.synthesis, self.synthesis.layer_names[-1])
-        # layer = SynthesisLayer(
-        #     w_dim=last_layer.w_dim, is_torgb=False, is_critically_sampled=last_layer.is_critically_sampled, use_fp16=last_layer.use_fp16,
-        #     in_channels=last_layer.in_channels, out_channels=out_channels,
-        #     in_size=last_layer.in_size, out_size=last_layer.out_size,
-        #     in_sampling_rate=last_layer.in_sampling_rate, out_sampling_rate=last_layer.out_sampling_rate,
-        #     in_cutoff=last_layer.in_cutoff, out_cutoff=last_layer.out_cutoff,
-        #     in_half_width=last_layer.in_half_width, out_half_width=last_layer.out_half_width,
-        #     conv_kernel=last_layer.conv_kernel, use_radial_filters=last_layer.use_radial_filters,
-        # )
-        # # cut off last layer
-        # print("cut off last layer")
-        # delattr(self.synthesis, self.synthesis.layer_names[-1])
-        # self.synthesis.layer_names.pop()
-        # self.head_layer_names.pop()
+        # get the attribute of the last layer
+        last_layer = getattr(self.synthesis, self.synthesis.layer_names[-1])
+        layer = SynthesisLayer(
+            w_dim=last_layer.w_dim, is_torgb=False, is_critically_sampled=last_layer.is_critically_sampled, use_fp16=last_layer.use_fp16,
+            in_channels=last_layer.in_channels, out_channels=out_channels,
+            in_size=last_layer.in_size, out_size=last_layer.out_size,
+            in_sampling_rate=last_layer.in_sampling_rate, out_sampling_rate=last_layer.out_sampling_rate,
+            in_cutoff=last_layer.in_cutoff, out_cutoff=last_layer.out_cutoff,
+            in_half_width=last_layer.in_half_width, out_half_width=last_layer.out_half_width,
+            conv_kernel=last_layer.conv_kernel, use_radial_filters=last_layer.use_radial_filters,
+        )
+        # cut off last layer
+        delattr(self.synthesis, self.synthesis.layer_names[-1])
+        self.synthesis.layer_names.pop()
+        self.head_layer_names.pop()
 
-        # # replace last layer with same attribute but 32x3 channels output
-        # print("replace last layer with same attribute but 32x3 channels output")
-        # name = f'L{len(self.synthesis.layer_names)+1}_{layer.out_size[0]}_{layer.out_channels}'
-        # setattr(self.synthesis, name, layer)
-        # self.synthesis.layer_names.append(name)
-        # self.head_layer_names.append(name)
-        # self.synthesis.img_channels = out_channels
+        # replace last layer with same attribute but 32x3 channels output
+        name = f'L{len(self.synthesis.layer_names)+1}_{layer.out_size[0]}_{layer.out_channels}'
+        setattr(self.synthesis, name, layer)
+        self.synthesis.layer_names.append(name)
+        self.head_layer_names.append(name)
+        self.synthesis.img_channels = out_channels
 
     def forward(self, z, c, truncation_psi=1, truncation_cutoff=None, update_emas=False, **synthesis_kwargs):
         ws = self.mapping(z, c, truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff, update_emas=update_emas)

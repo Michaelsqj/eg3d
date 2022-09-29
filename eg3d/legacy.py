@@ -18,6 +18,7 @@ import numpy as np
 import torch
 import dnnlib
 from torch_utils import misc
+import io
 
 #----------------------------------------------------------------------------
 
@@ -40,10 +41,10 @@ def load_network_pkl(f, force_fp16=False):
 
     # Validate contents.
     assert isinstance(data['G'], torch.nn.Module)
-    assert isinstance(data['D'], torch.nn.Module)
+    # assert isinstance(data['D'], torch.nn.Module)
     assert isinstance(data['G_ema'], torch.nn.Module)
-    assert isinstance(data['training_set_kwargs'], (dict, type(None)))
-    assert isinstance(data['augment_pipe'], (torch.nn.Module, type(None)))
+    # assert isinstance(data['training_set_kwargs'], (dict, type(None)))
+    # assert isinstance(data['augment_pipe'], (torch.nn.Module, type(None)))
 
     # Force FP16.
     if force_fp16:
@@ -68,6 +69,10 @@ class _LegacyUnpickler(pickle.Unpickler):
     def find_class(self, module, name):
         if module == 'dnnlib.tflib.network' and name == 'Network':
             return _TFNetworkStub
+        if module == 'torch.storage' and name == '_load_from_bytes':
+            return lambda b: torch.load(io.BytesIO(b), map_location='cpu')
+        if module == 'torch.storage' and name == '_load_from_bytes':
+            return lambda b: torch.load(io.BytesIO(b), map_location='cpu')
         return super().find_class(module, name)
 
 #----------------------------------------------------------------------------

@@ -161,16 +161,10 @@ def training_loop(
     if rank == 0:
         print('Constructing networks...')
     common_kwargs = dict(c_dim=training_set.label_dim, img_resolution=training_set.resolution, img_channels=training_set.num_channels)
-    if rank == 0:
-        print("Constructing G")
-    # G = dnnlib.util.construct_class_by_name(**G_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
-    # G = SuperresGenerator128().train().requires_grad_(False).to(device)
-    G = SuperresGenerator(128, "/home/engs2305/qijia_3d_model/eg3d/eg3d/imagenet64.pkl", 7, 2)
-    # G.register_buffer('dataset_label_std', torch.tensor(training_set.get_label_std()).to(device))
-    # if rank == 0:
-    #     print("Constructing D")
-    # D = dnnlib.util.construct_class_by_name(**D_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
-    # G_ema = copy.deepcopy(G).eval()
+    G = dnnlib.util.construct_class_by_name(**G_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
+    G.register_buffer('dataset_label_std', torch.tensor(training_set.get_label_std()).to(device))
+    D = dnnlib.util.construct_class_by_name(**D_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
+    G_ema = copy.deepcopy(G).eval()
 
     # Resume from existing pickle.
     if (resume_pkl is not None) and (rank == 0):
@@ -179,11 +173,11 @@ def training_loop(
             resume_data = legacy.load_network_pkl(f)
         for name, module in [('G', G), ('D', D), ('G_ema', G_ema)]:
             misc.copy_params_and_buffers(resume_data[name], module, require_all=False)
-    # elif (rank==0):
-    #     with dnnlib.util.open_url("/scratch/local/ssd/guangrun/qijia_3d_model/eg3d/eg3d/imagenet128.pkl") as f:
-    #         resume_data = legacy.load_network_pkl(f)
-    #     for name, module in [('D', D)]:
-    #         misc.copy_params_and_buffers(resume_data[name], module, require_all=False)
+    elif (rank==0):
+        with dnnlib.util.open_url("/home/engs2305/qijia_3d_model/eg3d/eg3d/imagenet128.pkl") as f:
+            resume_data = legacy.load_network_pkl(f)
+        for name, module in [('D', D)]:
+            misc.copy_params_and_buffers(resume_data[name], module, require_all=False)
 
     # Print network summary tables.
     if rank == 0:

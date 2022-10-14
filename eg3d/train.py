@@ -168,7 +168,7 @@ def parse_comma_separated_list(s):
 @click.option('--seed',         help='Random seed', metavar='INT',                              type=click.IntRange(min=0), default=0, show_default=True)
 # @click.option('--fp32',         help='Disable mixed-precision', metavar='BOOL',                 type=bool, default=False, show_default=True)
 @click.option('--nobench',      help='Disable cuDNN benchmarking', metavar='BOOL',              type=bool, default=False, show_default=True)
-@click.option('--workers',      help='DataLoader worker processes', metavar='INT',              type=click.IntRange(min=1), default=2, show_default=True)
+@click.option('--workers',      help='DataLoader worker processes', metavar='INT',              type=click.IntRange(min=1), default=3, show_default=True)
 @click.option('-n','--dry-run', help='Print training options and exit',                         is_flag=True)
 
 # @click.option('--sr_module',    help='Superresolution module', metavar='STR',  type=str, required=True)
@@ -224,11 +224,9 @@ def main(**kwargs):
     # Initialize config.
     opts = dnnlib.EasyDict(kwargs) # Command line arguments.
     c = dnnlib.EasyDict() # Main config dict.
-    c.G_kwargs = dnnlib.EasyDict(class_name=None, z_dim=512, w_dim=512, mapping_kwargs=dnnlib.EasyDict())
-    c.D_kwargs = dnnlib.EasyDict(class_name='training.networks_stylegan2.Discriminator', block_kwargs=dnnlib.EasyDict(), mapping_kwargs=dnnlib.EasyDict(), epilogue_kwargs=dnnlib.EasyDict())
+    c.G_kwargs = dnnlib.EasyDict(class_name=None, z_dim=64, w_dim=512, mapping_kwargs=dnnlib.EasyDict())
     c.G_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0,0.99], eps=1e-8)
     c.D_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0,0.99], eps=1e-8)
-    c.loss_kwargs = dnnlib.EasyDict(class_name='training.loss.StyleGAN2Loss')
     c.data_loader_kwargs = dnnlib.EasyDict(pin_memory=True, prefetch_factor=2)
 
     # Training set.
@@ -242,12 +240,68 @@ def main(**kwargs):
     c.num_gpus = opts.gpus
     c.batch_size = opts.batch
     c.batch_gpu = opts.batch_gpu or opts.batch // opts.gpus
-    c.G_kwargs.channel_base = c.D_kwargs.channel_base = opts.cbase
-    c.G_kwargs.channel_max = c.D_kwargs.channel_max = opts.cmax
+    c.G_kwargs.channel_base = opts.cbase
+    c.G_kwargs.channel_max = opts.cmax
     c.G_kwargs.mapping_kwargs.num_layers = opts.map_depth
+
+    c.G_kwargs.num_layers = 7
+    c.G_kwargs.mapping_kwargs.rand_embedding = False
+    c.G_kwargs.magnitude_ema_beta = 0.5 ** (c.batch_size / (20 * 1e3))
+    c.G_kwargs.channel_base *= 2  # increase for StyleGAN-XL
+    c.G_kwargs.channel_max *= 2   # increase for StyleGAN-XL
+    c.G_kwargs.conv_kernel = 3
+    c.G_kwargs.use_radial_filters = False
+
+
+    # Dual Discriminator
+    c.D_kwargs = dnnlib.EasyDict(class_name='training.networks_stylegan2.Discriminator', block_kwargs=dnnlib.EasyDict(), mapping_kwargs=dnnlib.EasyDict(), epilogue_kwargs=dnnlib.EasyDict())
     c.D_kwargs.block_kwargs.freeze_layers = opts.freezed
     c.D_kwargs.epilogue_kwargs.mbstd_group_size = opts.mbstd_group
+    c.D_kwargs.class_name = 'training.dual_discriminator.DualDiscriminator'
+    c.D_kwargs.disc_c_noise = opts.disc_c_noise # Regularization for discriminator pose conditioning
+    c.D_kwargs.num_fp16_res = opts.d_num_fp16_res
+    c.D_kwargs.conv_clamp = 256 if opts.d_num_fp16_res > 0 else None
+
+    # Projected Discriminator
+    # c.D_kwargs = dnnlib.EasyDict(
+    #     class_name='pg_modules.discriminator.ProjectedDiscriminator',
+    #     backbones=['deit_base_distilled_patch16_224', 'tf_efficientnet_lite0'],
+    #     diffaug=True,
+    #     interp224=(c.training_set_kwargs.resolution < 224),
+    #     backbone_kwargs=dnnlib.EasyDict(),
+    # )
+    # c.D_kwargs.backbone_kwargs.cout = 64
+    # c.D_kwargs.backbone_kwargs.expand = True
+    # c.D_kwargs.backbone_kwargs.proj_type = 2 if c.training_set_kwargs.resolution <= 16 else 2  # CCM only works better on very low resolutions
+    # c.D_kwargs.backbone_kwargs.num_discs = 4
+    # c.D_kwargs.backbone_kwargs.cond = opts.cond
+
+    # Dual Discriminator loss
+    c.loss_kwargs = dnnlib.EasyDict(class_name='training.loss.StyleGAN2Loss')
     c.loss_kwargs.r1_gamma = opts.gamma
+    c.loss_kwargs.filter_mode = 'antialiased' # Filter mode for raw images ['antialiased', 'none', float [0-1]]
+    c.loss_kwargs.blur_init_sigma = 10 # Blur the images seen by the discriminator.
+    c.loss_kwargs.blur_fade_kimg = c.batch_size * opts.blur_fade_kimg / 32 # Fade out the blur during the first N kimg.
+
+    c.loss_kwargs.gpc_reg_prob = opts.gpc_reg_prob if opts.gen_pose_cond else None
+    c.loss_kwargs.gpc_reg_fade_kimg = opts.gpc_reg_fade_kimg
+    c.loss_kwargs.dual_discrimination = True
+    c.loss_kwargs.neural_rendering_resolution_initial = opts.neural_rendering_resolution_initial
+    c.loss_kwargs.neural_rendering_resolution_final = opts.neural_rendering_resolution_final
+    c.loss_kwargs.neural_rendering_resolution_fade_kimg = opts.neural_rendering_resolution_fade_kimg
+    c.loss_kwargs.style_mixing_prob = opts.style_mixing_prob
+
+    # Projected Discriminator Loss
+    # c.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_stylegan_xl.ProjectedGANLoss')
+    # c.loss_kwargs.blur_init_sigma = 2  # Blur the images seen by the discriminator.
+    # c.loss_kwargs.blur_fade_kimg = 300
+    # c.loss_kwargs.pl_weight = 2.0
+    # c.loss_kwargs.pl_no_weight_grad = True
+    # c.loss_kwargs.style_mixing_prob = 0.0
+    # c.loss_kwargs.cls_weight = 0.0  # use classifier guidance only for superresolution training (i.e., with pretrained stem)
+    # c.loss_kwargs.cls_model = 'deit_small_distilled_patch16_224'
+    # c.loss_kwargs.train_head_only = True
+
     c.G_opt_kwargs.lr = (0.002 if opts.cfg == 'stylegan2' else 0.0025) if opts.glr is None else opts.glr
     c.D_opt_kwargs.lr = opts.dlr
     c.metrics = opts.metrics
@@ -262,18 +316,15 @@ def main(**kwargs):
         raise click.ClickException('--batch must be a multiple of --gpus')
     if c.batch_size % (c.num_gpus * c.batch_gpu) != 0:
         raise click.ClickException('--batch must be a multiple of --gpus times --batch-gpu')
-    if c.batch_gpu < c.D_kwargs.epilogue_kwargs.mbstd_group_size:
-        raise click.ClickException('--batch-gpu cannot be smaller than --mbstd')
+    # if c.batch_gpu < c.D_kwargs.epilogue_kwargs.mbstd_group_size:
+    #     raise click.ClickException('--batch-gpu cannot be smaller than --mbstd')
     if any(not metric_main.is_valid_metric(metric) for metric in c.metrics):
         raise click.ClickException('\n'.join(['--metrics can only contain the following values:'] + metric_main.list_valid_metrics()))
 
     # Base configuration.
     c.ema_kimg = c.batch_size * 10 / 32
-    c.G_kwargs.class_name = 'training.triplane.TriPlaneGenerator'
-    c.D_kwargs.class_name = 'training.dual_discriminator.DualDiscriminator'
-    c.G_kwargs.fused_modconv_default = 'inference_only' # Speed up training by using regular convolutions instead of grouped convolutions.
-    c.loss_kwargs.filter_mode = 'antialiased' # Filter mode for raw images ['antialiased', 'none', float [0-1]]
-    c.D_kwargs.disc_c_noise = opts.disc_c_noise # Regularization for discriminator pose conditioning
+    c.G_kwargs.class_name = 'training.triplane_xl.TriPlaneGenerator'
+    # c.G_kwargs.fused_modconv_default = 'inference_only' # Speed up training by using regular convolutions instead of grouped convolutions.
 
     if c.training_set_kwargs.resolution == 512:
         sr_module = 'training.superresolution.SuperresolutionHybrid8XDC'
@@ -282,7 +333,8 @@ def main(**kwargs):
     elif c.training_set_kwargs.resolution == 128:
         sr_module = 'training.superresolution.SuperresolutionHybrid2X'
     else:
-        assert False, f"Unsupported resolution {c.training_set_kwargs.resolution}; make a new superresolution module"
+        sr_module = 'training.superresolution.SuperresolutionHybrid2X'
+        # assert False, f"Unsupported resolution {c.training_set_kwargs.resolution}; make a new superresolution module"
     
     if opts.sr_module != None:
         sr_module = opts.sr_module
@@ -343,20 +395,11 @@ def main(**kwargs):
         c.G_reg_interval = opts.density_reg_every
     c.G_kwargs.rendering_kwargs = rendering_options
     c.G_kwargs.num_fp16_res = 0
-    c.loss_kwargs.blur_init_sigma = 10 # Blur the images seen by the discriminator.
-    c.loss_kwargs.blur_fade_kimg = c.batch_size * opts.blur_fade_kimg / 32 # Fade out the blur during the first N kimg.
 
-    c.loss_kwargs.gpc_reg_prob = opts.gpc_reg_prob if opts.gen_pose_cond else None
-    c.loss_kwargs.gpc_reg_fade_kimg = opts.gpc_reg_fade_kimg
-    c.loss_kwargs.dual_discrimination = True
-    c.loss_kwargs.neural_rendering_resolution_initial = opts.neural_rendering_resolution_initial
-    c.loss_kwargs.neural_rendering_resolution_final = opts.neural_rendering_resolution_final
-    c.loss_kwargs.neural_rendering_resolution_fade_kimg = opts.neural_rendering_resolution_fade_kimg
     c.G_kwargs.sr_num_fp16_res = opts.sr_num_fp16_res
 
     c.G_kwargs.sr_kwargs = dnnlib.EasyDict(channel_base=opts.cbase, channel_max=opts.cmax, fused_modconv_default='inference_only')
 
-    c.loss_kwargs.style_mixing_prob = opts.style_mixing_prob
 
     # Augmentation.
     if opts.aug != 'noaug':
@@ -381,14 +424,13 @@ def main(**kwargs):
     #     c.G_kwargs.conv_clamp = c.D_kwargs.conv_clamp = None
     c.G_kwargs.num_fp16_res = opts.g_num_fp16_res
     c.G_kwargs.conv_clamp = 256 if opts.g_num_fp16_res > 0 else None
-    c.D_kwargs.num_fp16_res = opts.d_num_fp16_res
-    c.D_kwargs.conv_clamp = 256 if opts.d_num_fp16_res > 0 else None
+
 
     if opts.nobench:
         c.cudnn_benchmark = False
 
     # Description string.
-    desc = f'{opts.cfg:s}-{dataset_name:s}-gpus{c.num_gpus:d}-batch{c.batch_size:d}-gamma{c.loss_kwargs.r1_gamma:g}'
+    desc = f'{opts.cfg:s}-{dataset_name:s}-gpus{c.num_gpus:d}-batch{c.batch_size:d}'
     if opts.desc is not None:
         desc += f'-{opts.desc}'
 

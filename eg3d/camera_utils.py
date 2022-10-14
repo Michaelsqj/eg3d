@@ -147,3 +147,37 @@ def FOV_to_intrinsics(fov_degrees, device='cpu'):
     focal_length = float(1 / (math.tan(fov_degrees * 3.14159 / 360) * 1.414))
     intrinsics = torch.tensor([[focal_length, 0, 0.5], [0, focal_length, 0.5], [0, 0, 1]], device=device)
     return intrinsics
+
+class SixPoseSampler:
+    """
+    Same as GaussianCameraPoseSampler, except the
+    pose is sampled from a uniform distribution with range +-[horizontal/vertical]_stddev.
+
+    Example:
+    For a batch of random camera poses looking at the origin with yaw sampled from [-pi/2, +pi/2] radians:
+
+    cam2worlds = UniformCameraPoseSampler.sample(math.pi/2, math.pi/2, horizontal_stddev=math.pi/2, radius=1, batch_size=16)
+    """
+
+    @staticmethod
+    def sample(batch_size=1, radius=1, device='cpu'):
+        theta = torch.tensor([1e-5, 1e-5, 1e-5, math.pi/2, math.pi-1e-5, math.pi/2*3], device=device).view(-1,1)
+        phi = torch.tensor([1e-5, math.pi/2, math.pi-1e-5, math.pi/2, math.pi/2, math.pi/2], device=device).view(-1,1)
+
+        dtheta = torch.rand(1, batch_size) * math.pi/2
+        dphi = torch.rand(1, batch_size) * math.pi/2
+
+        theta = theta + dtheta
+        phi = phi + dphi
+
+        theta = theta.view(-1,1)
+        phi = phi.view(-1,1)
+
+        camera_origins = torch.zeros((theta.shape[0], 3), device=device)
+
+        camera_origins[:, 0:1] = radius*torch.sin(phi) * torch.cos(math.pi-theta)
+        camera_origins[:, 2:3] = radius*torch.sin(phi) * torch.sin(math.pi-theta)
+        camera_origins[:, 1:2] = radius*torch.cos(phi)
+
+        forward_vectors = math_utils.normalize_vecs(-camera_origins)
+        return create_cam2world_matrix(forward_vectors, camera_origins)

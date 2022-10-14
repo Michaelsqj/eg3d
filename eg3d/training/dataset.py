@@ -218,10 +218,10 @@ class ImageFolderDataset(Dataset):
     def _load_raw_image(self, raw_idx):
         fname = self._image_fnames[raw_idx]
         with self._open_file(fname) as f:
-            if pyspng is not None and self._file_ext(fname) == '.png':
-                image = pyspng.load(f.read())
-            else:
-                image = np.array(PIL.Image.open(f))
+            # if pyspng is not None and self._file_ext(fname) == '.png':
+            #     image = pyspng.load(f.read())
+            # else:
+            image = np.array(PIL.Image.open(f).convert('RGB'))
         if image.ndim == 2:
             image = image[:, :, np.newaxis] # HW => HWC
         image = image.transpose(2, 0, 1) # HWC => CHW
@@ -249,7 +249,8 @@ class ImageFolderDataset(Dataset):
             onehot = np.zeros((len(labels), max_class_num), dtype=np.float32)
             onehot[range(len(labels)), class_raw_idx] = 1
 
-            labels = np.concatenate([labels[:,:25], onehot], axis=1)
+            # labels = np.concatenate([labels[:,:25], onehot], axis=1)
+            labels = onehot
         
         return labels
 

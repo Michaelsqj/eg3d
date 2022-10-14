@@ -8,6 +8,8 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
+import json
+import random
 import torch
 from torch_utils import persistence
 from training.networks_stylegan2 import Generator as StyleGAN2Backbone
@@ -45,22 +47,31 @@ class TriPlaneGenerator(torch.nn.Module):
     
         self._last_planes = None
     
+        with open("/datasets/guangrun/qijia_3d_model/ShapeNetCoreV2/camera_poses.json",'r') as f:
+                self.camera_poses = json.load(f)
+
     def mapping(self, z, c, truncation_psi=1, truncation_cutoff=None, update_emas=False):
         if self.rendering_kwargs['c_gen_conditioning_zero']:
                 c = torch.zeros_like(c)
         return self.backbone.mapping(z, c * self.rendering_kwargs.get('c_scale', 0), truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff, update_emas=update_emas)
 
     def synthesis(self, ws, c, neural_rendering_resolution=None, update_emas=False, cache_backbone=False, use_cached_backbone=False, **synthesis_kwargs):
-        cam2world_matrix = c[:, :16].view(-1, 4, 4)
-        intrinsics = c[:, 16:25].view(-1, 3, 3)
+        # cam2world_matrix = c[:, :16].view(-1, 4, 4)
+        # intrinsics = c[:, 16:25].view(-1, 3, 3)
+        intrinsics = torch.tensor([1.0, 0.0, 0.5, 0.0, 1.0, 0.5, 0.0, 0.0, 1.0], device=ws.device).view(1,3,3)
+        intrinsics = intrinsics.repeat([len(ws),1,1])
 
-        if neural_rendering_resolution is None:
-            neural_rendering_resolution = self.neural_rendering_resolution
-        else:
-            self.neural_rendering_resolution = neural_rendering_resolution
+        random.shuffle(self.camera_poses)
+        cam2world_matrix = [self.camera_poses[i]["cam_pose"][:16] for i in range(len(ws))]
+        cam2world_matrix = torch.tensor(cam2world_matrix, device=ws.device).view(-1,4,4)
+        
+        # if neural_rendering_resolution is None:
+        #     neural_rendering_resolution = self.neural_rendering_resolution
+        # else:
+        #     self.neural_rendering_resolution = neural_rendering_resolution
 
         # Create a batch of rays for volume rendering
-        ray_origins, ray_directions = self.ray_sampler(cam2world_matrix, intrinsics, neural_rendering_resolution)
+        ray_origins, ray_directions = self.ray_sampler(cam2world_matrix, intrinsics, self.neural_rendering_resolution)
 
         # Create triplanes by running StyleGAN backbone
         N, M, _ = ray_origins.shape
@@ -86,7 +97,8 @@ class TriPlaneGenerator(torch.nn.Module):
         rgb_image = feature_image[:, :3]
         sr_image = self.superresolution(rgb_image, feature_image, ws, noise_mode=self.rendering_kwargs['superresolution_noise_mode'], **{k:synthesis_kwargs[k] for k in synthesis_kwargs.keys() if k != 'noise_mode'})
 
-        return {'image': sr_image, 'image_raw': rgb_image, 'image_depth': depth_image}
+
+        return {'image': sr_image, 'image_raw': sr_image, 'image_depth': depth_image}
     
     def sample(self, coordinates, directions, z, c, truncation_psi=1, truncation_cutoff=None, update_emas=False, **synthesis_kwargs):
         # Compute RGB features, density for arbitrary 3D coordinates. Mostly used for extracting shapes. 

@@ -122,7 +122,7 @@ class DualDiscriminator(torch.nn.Module):
         epilogue_kwargs     = {},       # Arguments for DiscriminatorEpilogue.
     ):
         super().__init__()
-        img_channels *= 2
+        # img_channels *= 2
 
         self.c_dim = c_dim
         self.img_resolution = img_resolution
@@ -155,8 +155,9 @@ class DualDiscriminator(torch.nn.Module):
         self.disc_c_noise = disc_c_noise
 
     def forward(self, img, c, update_emas=False, **block_kwargs):
-        image_raw = filtered_resizing(img['image_raw'], size=img['image'].shape[-1], f=self.resample_filter)
-        img = torch.cat([img['image'], image_raw], 1)
+        # image_raw = filtered_resizing(img['image_raw'], size=img['image'].shape[-1], f=self.resample_filter)
+        # img = torch.cat([img['image'], image_raw], 1)
+        img = img['image']
 
         _ = update_emas # unused
         x = None
